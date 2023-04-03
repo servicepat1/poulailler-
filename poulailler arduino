@@ -1,0 +1,944 @@
+#include <LiquidCrystal_I2C.h>
+#include <Wire.h>
+#include <DHT.h>
+//#include <OneWire.h>                         // load the onewire library for thermometer
+#define DS3231_I2C_ADDRESS 0x68
+
+#define DHTPIN 4                            // what digital pin we're connected to 4
+#define DHTPINOUT 5                         // what digital pin we're connected to 5
+#define DHTTYPE DHT22 
+DHT dht(DHTPIN , DHTTYPE);
+DHT dhtout(DHTPINOUT , DHTTYPE);
+LiquidCrystal_I2C lcd(0x27,20,4);           // set the LCD address to 0x27 for a 20 chars and 4 line display 
+
+
+// pins assignments
+ 
+const int photocellPin = A0;                  // photocell connected to analog 0 ORANGE
+const int enableCoopDoorMotorB = 7;           // enable motor b - pin 7 VIOLET
+const int directionCloseCoopDoorMotorB = 8;   // direction close motor b - pin 8 BLEU
+const int directionOpenCoopDoorMotorB = 9;    // direction open motor b - pin 9 VERT
+const int bottomSwitchPin = 28;               // bottom switch is connected to pin 28 GRIS
+const int topSwitchPin = 29;                  // top switch is connected to pin 29 VIOLET
+const int enableCoopDoorMotorA = 10;          // enable motor b - pin 10 brun
+const int directionCloseCoopDoorMotorA = 11;  // direction close motor b - pin 11 vert
+const int directionOpenCoopDoorMotorA = 12;   // direction open motor b - pin 12 noir
+const int bottomSwitchOutPin = 26;            // bottom switch is connected to pin 26 jaune
+const int topSwitchOutPin = 27;               // top switch is connected to pin 27 VIOLET
+const int coopDoorOpenLed = 40;               // led set to digital pin 40 VERT
+const int coopDoorClosedLed = 41;             // led set to digital pin 41 ORANGE
+const int coopDoorOutOpenLed = 42;            // led set to digital pin 42 VERT
+const int coopDoorOutClosedLed = 43;          // led set to digital pin 43 ORANGE
+const int relaycoopDoorOpenLedRed=31;         // pin31 brun in 1 led jaune
+const int relayFan = 32;                      // exhaust fan relay set to digital pin 32 noir IN2 led bleu
+const int relayHeat = 33;                     // heat fan relay set to digital pin 33 blancIN3 led rouge
+const int relaycoopDoorClosedLedVert=34;      // pin34 gris in4 led vert
+const int relayInteriorLight = 35;            // interior lights relay set to digital pin 35 violet in5 led blanc
+const int redlight=36;                        // redlight relay set pin 36 violet in6
+const int waterheater = 37;                   // waterheater relay set to digital pin 37 jaune in7
+const int relayc=38;                          // pin38 vert in 8
+
+
+// variables
+ 
+ 
+// photocell
+int photocellReading;                          // analog reading of the photocel
+int photocellReadingLevel;                     // photocel reading levels (dark, twilight, light)
+ 
+ // reed switches top and bottom of coop door
+ // top switch
+ 
+int topSwitchPinVal;                           // top switch var for reading the pin status
+int topSwitchPinVal2;                          // top switch var for reading the pin delay/debounce status
+int topSwitchState;                            // top switch var for to hold the switch state
+
+ // top switch out
+   
+int topSwitchOutPinVal;                        // top switch out var for reading the pin status
+int topSwitchOutPinVal2;                       // top switch out var for reading the pin delay/debounce status
+int topSwitchOutState;                         // top switch var out for to hold the switch state
+
+// bottom switch
+ 
+int bottomSwitchPinVal;                        // bottom switch var for reading the pin status
+int bottomSwitchPinVal2;                       // bottom switch var for reading the pin delay/debounce status
+int bottomSwitchState;                         // bottom switch var for to hold the switch state
+ 
+ // bottom switch out
+ 
+int bottomSwitchOutPinVal;                     // bottom switch out var for reading the pin status
+int bottomSwitchOutPinVal2;                    // bottom switch out var for reading the pin delay/debounce status
+int bottomSwitchOutState;                      // bottom switch out var for to hold the switch state
+
+// debounce delay
+long lastDebounceTime = 0;
+long debounceDelay = 100;
+// debounce delay out
+long lastDebounceTimeOut = 0;
+long debounceDelayOut = 100;
+// debounce delay
+long lastDebounceTimeTop = 0;
+long debounceDelayTop = 100;
+// debounce delay out
+long lastDebounceTimeTopOut = 0;
+long debounceDelayTopOut = 100;
+      //delay temps
+long lastTempTime = 0;
+long tempDelay = 500;
+long lastTempTime3 = 0;
+long tempDelay3 = 500;
+long tempsouverture= 0;
+long tempsfermeture= 0;
+long tempsdesoleil = 0;
+unsigned long derniertempsdesoleil=0;
+
+long delaisjour=39600000;//delais de 11 heure
+long lastLightDuskTime=0;
+long LightDuskDelay=600000; //delay 10 minturn off relayInteriorLight 
+
+// time Heat
+     long lastTimeHeat2=0;
+     long HeatDelay2=120000;
+// time cool
+    
+     long lastTimecool2=0;
+     long coolDelay2=120000;
+//fan delain on off
+     long lastTimefanon = 0;
+     long fanDelayon= 600000;//fan on 10 min
+     long lastTimefanoff =0;
+     long fanDelayoff = 3600000;//fan off 60 min
+     long lastTimefanon1 = 0;
+     long fanDelayon1= 300000;//fan on 5 min
+     long lastTimefanoff1 =0;
+     long fanDelayoff1 = 7200000;//fan off 120 min
+      // time red light
+     long lastTimeredlight2=0;
+     long redlightDelay2=120000;
+// time waterheater
+     long lastTimewaterheatert2=0;
+     long waterheaterDelay2=120000;
+     
+//relaycoopDoor
+int redState = LOW; //state of LED
+int vertState = HIGH; //state2 of LED 
+long previousMillis = 0;      // will store last time LED was updated
+long interval = 1000;           // interval at which to blink (milliseconds)
+ 
+
+// temperature
+float humidity ;                           // Readhumidity as % (the default)
+float temperature ;                        // Read temperature as Celsius (the default)
+float humidityout;                         // Readhumidity as % (the default)
+float temperatureout;                      // Read temperature as Celsius (the default)
+ 
+ 
+// temperature check delay
+long lastTempCheckTime = 0;                  // temp delay
+long TempCheckDelay = 1000;                // 10 minutes
+long lastTemp2CheckTime = 0;                 // temp delay
+long Temp2CheckDelay = 1000;               // 2 minutes
+long lastTemp5CheckTime = 0;                 // temp delay
+long Temp5CheckDelay = 1000;               // 5 minutes
+long lastTwilightTime = 0;                   // interior lights twighlight delayif ((millis() - lastTemp5CheckTime) > Temp5CheckDelay){
+long TwilightDelay = 1000;                 // 2 minutes
+
+
+
+// ************************************** the setup **************************************
+ void setup(void) {
+  
+
+   Serial.begin(9600); // initialize serial port hardware
+   // welcome message
+   Serial.println(" Processes running:");
+   Serial.println(" Timer readPhotoCell every 10 minutes - light levels: open or close door"); 
+   Serial.println("DHT22 test!");
+   lcd.begin(20,4);
+   dht.begin();
+   dhtout.begin();
+   lcd.init();                      // initialize the lcd 
+    Wire.begin();
+   // Print a message to the LCD.
+  lcd.clear();
+  lcd.backlight();
+  lcd.setCursor(3,0);
+  lcd.print("joyeux noel !");
+  lcd.setCursor(4,1);
+  lcd.print("mes ti monstres !");
+  lcd.setCursor(5,2);
+  lcd.print("je vous aime");
+  lcd.setCursor(4,3);
+  lcd.print("ooooooooo!");
+  
+ 
+  // coop door  
+ 
+  // coop door motor
+  pinMode (enableCoopDoorMotorB, OUTPUT);           // enable motor pin = output
+  pinMode (directionCloseCoopDoorMotorB, OUTPUT);   // motor close direction pin = output
+  pinMode (directionOpenCoopDoorMotorB, OUTPUT);    // motor open direction pin = output
+
+  // coop door switches
+  // bottom switch
+  pinMode(bottomSwitchPin, INPUT);                  // set bottom switch pin as input
+
+  
+   // top switch
+   pinMode(topSwitchPin, INPUT);                     // set top switch pin as input
+
+ 
+  
+  // coop door leds
+  pinMode (coopDoorOpenLed, OUTPUT);                // enable coopDoorOpenLed = output
+  pinMode (coopDoorClosedLed, OUTPUT);              // enable coopDoorClosedLed = output
+   
+  // coop door out
+
+  // coop door motor out
+  pinMode (enableCoopDoorMotorA, OUTPUT);            // enable motor pin = output
+  pinMode (directionCloseCoopDoorMotorA, OUTPUT);    // motor close direction pin = output
+  pinMode (directionOpenCoopDoorMotorA, OUTPUT);     // motor open direction pin = output
+ 
+  // coop door switches out
+  // bottom switch
+  pinMode(bottomSwitchOutPin, INPUT);                // set bottom switch out pin as input
+
+ 
+  // top switch out
+  pinMode(topSwitchOutPin, INPUT);                   // set top switch out pin as input
+
+  
+  // coop door out leds
+  pinMode (coopDoorOutOpenLed, OUTPUT);              // enable coopDoorOutOpenLed = output
+  pinMode (coopDoorOutClosedLed, OUTPUT);            // enable coopDoorOutClosedLed = output
+  
+  // coop hvac
+  pinMode(relayHeat, OUTPUT);                        //set heat lamp relay 33
+  pinMode(relayFan, OUTPUT);                         //set exhaust fan relay 34
+  
+  // interior lights relay
+  pinMode(relayInteriorLight, OUTPUT);               //interior lights relay  set pin 32
+ 
+ 
+   // waterheater relay
+   pinMode(waterheater, OUTPUT);                     //waterheater relay set to digital pin 37
+  
+   //redlight relay
+   pinMode(redlight,OUTPUT);                         //redlight relay set pin 35
+ 
+   pinMode(relaycoopDoorOpenLedRed,OUTPUT);          //relay door open set pin 36
+
+   pinMode(relaycoopDoorClosedLedVert,OUTPUT);       //relay door close set pin 37
+   
+   pinMode(relayc,OUTPUT);                           //relay set pin 38
+   digitalWrite(relayc, LOW);
+
+   }
+ 
+// ************************************** functions **************************************
+void delaydesoleil(){ 
+       if((tempsfermeture-tempsouverture)<=delaisjour){
+       (tempsdesoleil=(tempsfermeture-tempsouverture));
+         derniertempsdesoleil= millis;
+        digitalWrite (relayInteriorLight, HIGH);
+       }
+      
+       if ((millis() - derniertempsdesoleil) >= tempsdesoleil){
+        digitalWrite (relayInteriorLight, HIGH);
+        tempsfermeture=0;
+        tempsouverture=0;
+       }
+       
+
+}
+void docoopdht(){
+  
+    // Wait a few seconds between measurements.
+    if ((millis() - lastTempTime) > tempDelay){  // delay 500ms for consistent readings
+      lastTempTime=millis();                               // reset lastTempTime
+       
+    // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
+    humidity = dht.readHumidity();                      // Reading temperature or humidity takes about 250 milliseconds!
+  
+    temperature = dht.readTemperature();                // Read temperature as Celsius (the default)
+
+    humidityout = dhtout.readHumidity();                // Reading temperature or humidity takes about 250 milliseconds!
+                                             
+    temperatureout = dhtout.readTemperature(); }        // Read temperatureout as Celsius (the default)
+
+    Serial.print(" Coop Temperature:");                 // print out  coop temperature 
+    Serial.println(temperature);                        // read out the temperature 
+    Serial.print(" Coop Temperatureout:");              // print out the temperatureout
+    Serial.println(temperatureout);                     // read the temperatureout
+    Serial.print(" Coop humidity:");                    // print out the humidityout
+    Serial.println(humidity);                           // read out the humidity 
+    Serial.print(" Coop humidityout:");                 // print out the humidityout
+    Serial.println(humidityout);                        // read out the humidityout
+     
+    // Check if any reads failed and exit early (to try again).
+    if (isnan(humidity) || isnan(temperature) ||isnan(temperatureout) || isnan(humidityout)) 
+    Serial.println("Failed to read from DHT docoopdht sensor!");
+
+   
+    }
+  
+  // coop hvac 
+   
+void doCoopHVACHeat(){
+    // Wait a few seconds between measurements.
+   if ((millis() - lastTempTime) > tempDelay ){
+                 lastTempTime=millis();
+    
+    temperature = dht.readTemperature();}
+  
+    
+
+
+
+                                                  // Check if any reads failed and exit early (to try again).
+  if (isnan(temperature)) 
+    Serial.println("Failed to read from doCoopHVACHeat!");
+
+  {
+    Serial.print(" Coop Temperature:");           // print out  coop temperature 
+    Serial.println(temperature);                  // read out the temperature 
+   
+  }
+ 
+  if ((millis() - lastTimeHeat2) > HeatDelay2) 
+// check temperature every 2 minutes
+          lastTimeHeat2=millis();
+   // if cold, turn on heat fan
+   if (temperature <= 10) {                                  // if temp drops below 10c turn on heat fan relay
+      digitalWrite(relayHeat, HIGH);
+      Serial.println ("relayHeat on:");
+    }
+    else if (temperature > 10) {
+      digitalWrite(relayHeat, LOW);                          // if temp remains above 10 c turn off heat fan relay
+      Serial.println ("relayHeat off:");
+    }
+  }
+
+ 
+ 
+ 
+// if hot, turn on cooling fan
+void doCoopHVACCool() {
+  
+  // Wait a few seconds between measurements.
+    if ((millis() - lastTempTime) > tempDelay ){
+                  lastTempTime=millis();
+    temperature = dht.readTemperature();}
+
+ {
+  // Check if any reads failed and exit early (to try again).
+  if (isnan(temperature) ) 
+    Serial.println("Failed to read from DHT HVACCool sensor!");
+  
+  }
+ 
+  if ((millis() - lastTimecool2) > coolDelay2) {    // check temperature every 2 minutes
+           lastTimecool2=millis();
+      if (temperatureout >=temperature);{    
+    if (temperature >= 20) {                                  // if temp rises above 20c turn on cooling fan relay
+      digitalWrite(relayFan, HIGH);
+       Serial.println ("relayfan on:");
+    }
+ 
+    else if (temperature < 19) {
+      digitalWrite(relayFan, LOW);        //if temp low 19c turn coling fan relay
+       Serial.println ("relayfan off:");
+    }
+   
+  }
+  if (temperatureout <=temperature);{
+    if ((millis() - lastTimefanon) > fanDelayon) {     // save the last time you blinked the LED
+    lastTimefanon = millis;
+    digitalWrite(relayFan, HIGH);
+       Serial.println ("relayfan on:");
+       }
+       
+       if((millis() - lastTimefanoff) > fanDelayoff) {    
+    lastTimefanoff = millis;
+     digitalWrite(relayFan, LOW);        //if temp low 19c turn coling fan relay
+       Serial.println ("relayfan off:");
+     }
+    }
+    if (temperatureout <=-10);{
+    if ((millis() - lastTimefanon1) > fanDelayon1) {    
+    lastTimefanon1 = millis;
+    digitalWrite(relayFan, HIGH);
+       Serial.println ("relayfan on:");
+       }
+       
+       if((millis() - lastTimefanoff1) > fanDelayoff1) {     
+    lastTimefanoff1 = millis;
+     digitalWrite(relayFan, LOW);        
+       Serial.println ("relayfan off:");
+     }
+    }
+}
+}
+
+void doCoopRedLight (){ 
+    if ((millis() - lastTempTime) > tempDelay ){  // Wait a few seconds between measurements.
+                  lastTempTime=millis();
+    temperature = dht.readTemperature();}
+
+ {
+  // Check if any reads failed and exit early (to try again).
+  if (isnan(temperature) ) 
+    Serial.println("Failed to read from DHT HVACCool sensor!");
+  
+  }
+ 
+  if ((millis() - lastTimeredlight2) > redlightDelay2) {    // check temperature every 2 minutes
+           lastTimeredlight2=millis();
+    if (temperature >= 15) {                                  // if temp rises above 20c turn on cooling fan relay
+      digitalWrite(redlight,LOW);
+       Serial.println ("redlight off:");
+    }
+ 
+    else if (temperature < 19) {
+      digitalWrite(relayFan, HIGH);                             //if temp low 19c turn coling fan relay
+       Serial.println ("redlight on:");
+    }
+  }
+}
+
+  
+ 
+
+void doCoopwaterheater () { 
+    // Wait a few seconds between measurements.
+    if ((millis() - lastTempTime) > tempDelay ){
+      lastTempTime=millis();
+    temperature = dht.readTemperature();}
+
+ {
+  // Check if any reads failed and exit early (to try again).
+  if (isnan(temperature) ) 
+    Serial.println("Failed to read from DHT waterheater sensor!");
+  
+  }
+ 
+  if ((millis() - lastTimewaterheatert2) > waterheaterDelay2) {    // check temperature every 2 minutes
+              lastTimewaterheatert2=millis();
+    if (temperature >= 2) {                                      // if temp rises above 2 turn off waterheater relay
+      digitalWrite(waterheater, LOW);
+       Serial.println ("waterheater off:");
+    }
+ 
+    else if (temperature < 2) {
+      digitalWrite(waterheater, HIGH);                           //if temp low 19c turn waterheater relay
+       Serial.println ("waterheater on:");
+    }
+   }
+ }
+ 
+
+// operate the coop door
+ 
+// photocel to read levels of exterior light
+ 
+void readPhotoCell() { 
+  
+if ((millis() - lastTempCheckTime) > TempCheckDelay){     
+           lastTempCheckTime=millis();
+  photocellReading = analogRead(photocellPin);
+
+}
+  {
+    Serial.print(" Photocel Analog Reading = ");
+    Serial.println(photocellReading);
+  }
+ 
+ 
+  //  set photocel threshholds
+  if (photocellReading >= 921 && photocellReading <1023){
+    photocellReadingLevel = '1';
+    {
+      Serial.print(" Photocel Reading Level:");
+      //Serial.println(" - Dark");
+      Serial.println(" - Dark");
+    }
+  }  
+  else if (photocellReading  < 920 && photocellReading >= 750) {
+    photocellReadingLevel = '2';
+    {
+      Serial.print(" Photocel Reading Level:");
+      Serial.println(" - Twilight");
+    }
+  }
+  
+  else if (photocellReading  > 0 && photocellReading < 749) {
+   
+    photocellReadingLevel = '3';
+
+    {
+      Serial.print(" Photocel Reading Level:");
+      Serial.println(" - Light");
+    }
+   
+  }
+}
+
+//debounce bottom reed switch--------------------------------------------------------------------------------------------
+ 
+void debounceBottomReedSwitch() { 
+ 
+  //debounce bottom reed switch
+  bottomSwitchPinVal = digitalRead(bottomSwitchPin);       // read input value and store it in val
+  // delay(10);
+ 
+  if ((millis() - lastDebounceTime) > debounceDelay) {    // delay 10ms for consistent readings
+         lastDebounceTime=millis();
+ 
+    bottomSwitchPinVal2 = digitalRead(bottomSwitchPin);    // read input value again to check or bounce
+ 
+    if (bottomSwitchPinVal == bottomSwitchPinVal2) {       // make sure we have 2 consistant readings
+      if (bottomSwitchPinVal != bottomSwitchState) {       // the switch state has changed!
+        bottomSwitchState = bottomSwitchPinVal;
+      }
+
+      {
+        Serial.print ("Bottom Switch pin: ");           // display "Bottom Switch Value:" 
+        Serial.println(digitalRead(bottomSwitchPin));      // display current value of bottom switch;
+        Serial.print ("bottomSwitchPinVal: ");           // display "Bottom Switch Value:" 
+        Serial.println(digitalRead(bottomSwitchPinVal));      // display current value of bottom switch;
+        Serial.print ("bottomSwitchPinVal2: ");           // display "Bottom Switch Value:" 
+        Serial.println(digitalRead(bottomSwitchPinVal2));      // display current value of bottom switch;
+        Serial.print ("bottomSwitchState: ");           // display "Bottom Switch Value:" 
+        Serial.println(digitalRead(bottomSwitchState));      // display current value of bottom switch;
+
+
+
+      }
+    }
+  }
+}
+ 
+//debounce bottom reed switch out-----------------------------------------------------
+ 
+void debounceBottomReedSwitchOut() { 
+ 
+  //debounce bottom reed switch
+  bottomSwitchOutPinVal = digitalRead(bottomSwitchOutPin);       // read input value and store it in val
+  // delay(10);
+ 
+  if ((millis() - lastDebounceTimeOut) > debounceDelayOut) {    // delay 10ms for consistent readings
+       lastDebounceTimeOut=millis();
+ 
+    bottomSwitchOutPinVal2 = digitalRead(bottomSwitchOutPin);    // read input value again to check or bounce
+ 
+    if (bottomSwitchOutPinVal == bottomSwitchOutPinVal2) {       // make sure we have 2 consistant readings
+      if (bottomSwitchOutPinVal != bottomSwitchOutState) {       // the switch state has changed!
+        bottomSwitchOutState = bottomSwitchOutPinVal;
+      }
+
+      {
+        Serial.print ("Bottom Switch Out pin: ");           // display "Bottom Switch out Value:" 
+        Serial.println(digitalRead(bottomSwitchOutPin));      // display current value of bottom switch out;
+        Serial.print ("Bottom Switch Out state: ");           // display "Bottom Switch out Value:" 
+        Serial.println(digitalRead(bottomSwitchOutState));      // display current value of bottom switch out;
+        Serial.print ("Bottom Switch Out pin val: ");           // display "Bottom Switch out Value:" 
+        Serial.println(digitalRead(bottomSwitchOutPinVal));      // display current value of bottom switch out;
+        Serial.print ("Bottom Switch Out pin val2: ");           // display "Bottom Switch out Value:" 
+        Serial.println(digitalRead(bottomSwitchOutPinVal2));      // display current value of bottom switch out;
+
+      }
+    }
+  }
+} 
+ 
+// debounce top reed switch
+void debounceTopReedSwitch() {
+ 
+  topSwitchPinVal = digitalRead(topSwitchPin);             // read input value and store it in val
+  //  delay(10);
+ 
+  if ((millis() - lastDebounceTimeTop) > debounceDelayTop) {     // delay 10ms for consistent readings
+        lastDebounceTimeTop=millis();
+ 
+    topSwitchPinVal2 = digitalRead(topSwitchPin);          // read input value again to check or bounce
+ 
+    if (topSwitchPinVal == topSwitchPinVal2) {             // make sure we have 2 consistant readings
+      if (topSwitchPinVal != topSwitchState) {             // the button state has changed!
+        topSwitchState = topSwitchPinVal;
+      }
+
+      {
+        Serial.print (" topSwitchPin: ");              // display "Bottom Switch Value:" 
+        Serial.println(digitalRead(topSwitchPin));         // display current value of bottom switch;
+        Serial.print (" topSwitchPinVal: ");              // display "Bottom Switch Value:" 
+        Serial.println(digitalRead(topSwitchPinVal));         // display current value of bottom switch;
+        Serial.print (" topSwitchPinVal2: ");              // display "Bottom Switch Value:" 
+        Serial.println(digitalRead(topSwitchPinVal2));         // display current value of bottom switch;
+        Serial.print (" topSwitchState: ");              // display "Bottom Switch Value:" 
+        Serial.println(digitalRead(topSwitchState));         // display current value of bottom switch;
+
+      }
+    }
+  }
+}
+
+ // debounce top reed switch out
+void debounceTopReedSwitchOut() {
+ 
+  topSwitchOutPinVal = digitalRead(topSwitchOutPin);             // read input value and store it in val
+  //  delay(10);
+ 
+  if ((millis() - lastDebounceTimeTopOut) > debounceDelayTopOut) {     // delay 10ms for consistent readings
+        lastDebounceTimeTopOut=millis();
+ 
+    topSwitchOutPinVal2 = digitalRead(topSwitchOutPin);          // read input value again to check or bounce
+ 
+    if (topSwitchOutPinVal == topSwitchOutPinVal2) {             // make sure we have 2 consistant readings
+      if (topSwitchOutPinVal != topSwitchOutState) {             // the button state has changed!
+        topSwitchOutState = topSwitchOutPinVal;
+      }
+
+      {
+        Serial.print ("topSwitchOutPin: ");              // display "Bottom Switch out Value:" 
+        Serial.println(digitalRead(topSwitchOutPin));         // display current value of bottom switch out;
+        Serial.print ("topSwitchOutPinVal: ");              // display "Bottom Switch out Value:" 
+        Serial.println(digitalRead(topSwitchOutPinVal));         // display current value of bottom switch out;
+        Serial.print ("topSwitchOutPinVal2: ");              // display "Bottom Switch out Value:" 
+        Serial.println(digitalRead(topSwitchOutPinVal2));         // display current value of bottom switch out;
+        Serial.print ("topSwitchOutState: ");              // display "Bottom Switch out Value:" 
+        Serial.println(digitalRead(topSwitchOutState));         // display current value of bottom switch out;
+
+      }
+    }
+  }
+}
+
+// stop the coop door motor
+void stopCoopDoorMotorB(){
+   digitalWrite (directionCloseCoopDoorMotorB, LOW);      // turn off motor close direction
+   digitalWrite (directionOpenCoopDoorMotorB, LOW);       // turn on motor open direction
+   analogWrite (enableCoopDoorMotorB, 0);                 // enable motor, 0 speed
+}
+
+ // stop the coop door motorOut
+void stopCoopDoorMotorA(){
+   digitalWrite (directionCloseCoopDoorMotorA, LOW);      // turn off motor out close direction
+   digitalWrite (directionOpenCoopDoorMotorA, LOW);       // turn on motor out open direction
+   analogWrite (enableCoopDoorMotorA, 0);                 // enable motor out, 0 speed
+}
+
+ 
+// close the coop door motor (motor dir close = clockwise) 
+void closeCoopDoorMotorB() {  
+   digitalWrite (directionCloseCoopDoorMotorB, HIGH);     // turn on motor close direction
+   digitalWrite (directionOpenCoopDoorMotorB, LOW);       // turn off motor open direction
+   analogWrite (enableCoopDoorMotorB, 255);               // enable motor, full speed 
+  if (bottomSwitchPinVal == 1) {                         // if bottom reed switch circuit is closed
+    stopCoopDoorMotorB();
+
+    {
+      Serial.println(" Coop Door Closed - no danger");
+    
+    }
+  }
+}
+ 
+// close the coop door motor (motor dir close = clockwise) 
+void closeCoopDoorMotorA() {  
+  digitalWrite (directionCloseCoopDoorMotorA, HIGH);     // turn on motor out close direction
+  digitalWrite (directionOpenCoopDoorMotorA, LOW);       // turn off motor out open direction
+  analogWrite (enableCoopDoorMotorA, 255);               // enable motor out, full speed 
+  if (bottomSwitchOutPinVal == 1) {                         // if bottom reed switch out  circuit is closed
+    stopCoopDoorMotorA();
+    tempsfermeture=millis;
+
+    {
+      Serial.println(" Coop Door out Closed - no danger");
+     
+    }
+  }
+} 
+ 
+// open the coop door (motor dir open = counter-clockwise)
+void openCoopDoorMotorB() { 
+  digitalWrite(directionCloseCoopDoorMotorB, LOW);       // turn off motor close direction
+  digitalWrite(directionOpenCoopDoorMotorB, HIGH);       // turn on motor open direction
+  analogWrite(enableCoopDoorMotorB, 200);                // enable motor, full speed
+  if (topSwitchPinVal == 1) {                            // if top reed switch circuit is closed
+    stopCoopDoorMotorB();
+    tempsouverture=millis;
+    
+
+    {
+      Serial.println(" Coop Door open - danger!");
+    
+    }
+  }
+}
+
+
+ // open the coop door (motor dir open = counter-clockwise)
+void openCoopDoorMotorA() { 
+  digitalWrite(directionCloseCoopDoorMotorA, LOW);       // turn off motor out close direction
+  digitalWrite(directionOpenCoopDoorMotorA, HIGH);       // turn on motor out open direction
+  analogWrite(enableCoopDoorMotorA, 200);                // enable motor out, full speed
+  if (topSwitchOutPinVal == 1) {                            // if top reed switchout circuit is closed
+    stopCoopDoorMotorA();
+
+    {
+      Serial.println(" Coop Door out open - danger!");
+      
+    }
+  }
+}
+
+//  coop door status: red if open, green if closed, blinking red if stuck 
+ 
+void doCoopDoorLed() {
+  // coop door 
+  if (bottomSwitchPinVal == 1) {                         // if bottom reed switch circuit is closed
+    digitalWrite (coopDoorClosedLed, HIGH);              // turns on coopDoorClosedLed (green)
+    digitalWrite (coopDoorOpenLed, LOW);                 // turns off coopDoorOpenLed (red)
+  }
+  else if(topSwitchPinVal == 1) {                        // if top reed switch circuit is closed 
+    digitalWrite (coopDoorClosedLed, LOW);               // turns off coopDoorClosedLed (green)
+    digitalWrite (coopDoorOpenLed, HIGH);                // turns on coopDoorOpenLed (red)
+  }
+
+  else {
+    digitalWrite (coopDoorClosedLed, LOW);              // turns off coopDoorClosedLed (green)
+    digitalWrite (coopDoorOpenLed, LOW);                // turns off coopDoorOpenLed (red)
+  }
+  // coop door out
+  if (bottomSwitchOutPinVal == 1) {                         // if bottom reed switch circuit is closed
+    digitalWrite (coopDoorOutClosedLed, HIGH);              // turns on coopDoorOutClosedLed (green)
+    digitalWrite (coopDoorOutOpenLed, LOW);                 // turns off coopDoorOutOpenLed (red)
+  }
+  else if(topSwitchOutPinVal == 1) {                        // if top reed switch circuit is closed 
+    digitalWrite (coopDoorOutClosedLed, LOW);               // turns off coopDoorOutClosedLed (green)
+    digitalWrite (coopDoorOutOpenLed, HIGH);                // turns on coopDoorOutOpenLed (red)
+  }
+
+  else {
+    digitalWrite (coopDoorOutClosedLed, LOW);              // turns off coopDoorOutClosedLed (green)
+    digitalWrite (coopDoorOutOpenLed, LOW);                // turns off coopDoorOutOpenLed (red)
+  }
+  if (bottomSwitchPinVal == 1 &&bottomSwitchOutPinVal == 1 ){      // &&topSwitchPinVal == 0 && topSwitchOutPinVal == 0
+    digitalWrite (relaycoopDoorClosedLedVert,HIGH);
+    Serial.println ("relaycoopDoorClosedLedVert,HIGH");
+  }
+  else if (topSwitchPinVal == 1 && topSwitchOutPinVal == 1){       //bottomSwitchPinVal == 0 &&bottomSwitchOutPinVal == 0 && 
+    digitalWrite (relaycoopDoorOpenLedRed,HIGH);
+    Serial.println ("relaycoopDoorOpenLedRed,HIGH");
+    }
+    else{ relaycoopDoor();     
+    }
+}
+ 
+ void relaycoopDoor() {
+ 
+long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= interval) {
+    // save the last time you blinked the LED
+    previousMillis = currentMillis;
+
+    // if the LED is off turn it on and vice-versa:
+    if (redState == LOW) {//,(vertState == HIGH)
+      redState = HIGH;
+     vertState = LOW;
+    } else {
+      redState = LOW;
+      vertState = HIGH;
+    }
+
+    // set the LED with the ledState of the variable:
+    digitalWrite(relaycoopDoorOpenLedRed, redState);
+    digitalWrite(relaycoopDoorClosedLedVert, vertState);
+    Serial.print(" Coop door redState:");                
+    Serial.println(redState);       
+    Serial.print(" Coop door vertState:");                
+    Serial.println(vertState);      
+  }
+}
+
+ 
+//  turn on interior lights at dusk and turn off after door shuts
+ 
+void doCoopInteriorLightDusk() {
+  
+    if ((millis() - lastTwilightTime) > TwilightDelay) {     // delay 2 mins
+           lastTwilightTime=millis();
+ 
+       readPhotoCell();
+   
+    if (topSwitchPinVal ==1 && photocellReading  < 920 && photocellReading >= 750) 
+   
+    {   // if top reed switch circuit is open and it's twilight
+      digitalWrite (relayInteriorLight, HIGH);
+
+      { 
+        Serial.println(" Interior Light: On");
+      }
+    }
+   }
+ else if (bottomSwitchPinVal=1&&photocellReading >= 921 && photocellReading <1023){
+  if (millis() - lastLightDuskTime >= LightDuskDelay){      // delay 10 mins
+        lastLightDuskTime=millis();
+        digitalWrite (relayInteriorLight, LOW);// if bottom reed switch circuit is open and it's dark
+        {
+        Serial.println(" Interior Light: Off");
+      }
+    
+    }
+  }
+
+}
+ // do the coop door
+void doCoopDoor(){
+
+  if (temperatureout >= -18){
+  if (photocellReadingLevel  == '1') {              // if it's dark
+    if (photocellReadingLevel != '2') {             // if it's not twilight
+      if (photocellReadingLevel != '3') {           // if it's not light 
+        debounceTopReedSwitch();                    // read and debounce the switches
+        debounceBottomReedSwitch();
+        closeCoopDoorMotorB();                      // close the door
+      }
+    }
+  }
+  
+  
+  if (photocellReadingLevel  == '3') {              // if it's light
+    if (photocellReadingLevel != '2') {             // if it's not twilight
+      if (photocellReadingLevel != '1') {           // if it's not dark 
+        debounceTopReedSwitch();                    // read and debounce the switches
+        debounceBottomReedSwitch();
+        openCoopDoorMotorB();                       // Open the door
+      }
+    }
+
+  }
+  }
+// else if (photocellReadingLevel == '2'){
+        //stopCoopDoorMotorB();
+        //debounceTopReedSwitch();                    // read and debounce the switches
+       // debounceBottomReedSwitch();
+// } 
+}
+
+ 
+// do the coop door out
+void doCoopDoorOut(){
+  if (temperatureout >= -18){
+  if (photocellReadingLevel  == '1') {              // if it's dark
+    if (photocellReadingLevel != '2') {             // if it's not twilight
+      if (photocellReadingLevel != '3') {           // if it's not light 
+        debounceTopReedSwitchOut();                    // read and debounce the switches
+        debounceBottomReedSwitchOut();
+        closeCoopDoorMotorA();                      // close the door
+      }
+    }
+  } 
+
+  if (photocellReadingLevel  == '3') {              // if it's light
+    if (photocellReadingLevel != '2') {             // if it's not twilight
+      if (photocellReadingLevel != '1') {           // if it's not dark 
+        debounceTopReedSwitchOut();                    // read and debounce the switches
+        debounceBottomReedSwitchOut();
+        openCoopDoorMotorA();                       // Open the door
+      }
+    }
+  }
+  }
+ //else if(photocellReadingLevel == '2'){
+         // stopCoopDoorMotorA();
+          // debounceTopReedSwitchOut();                    // read and debounce the switches
+            // debounceBottomReedSwitchOut();
+         //   } 
+}
+
+//  lcd
+void doLcdMsg() {
+  // lcd
+  lcd.begin(20,4);
+  lcd.clear();
+  lcd.backlight();
+  //lcd.setCursor(0,0);
+  //lcd.print("Hum:");
+  ////lcd.setCursor(0,4);
+  //lcd.print(humidity);
+  //lcd.setCursor(0,10);
+  //lcd.print("%");
+  
+ //lcd.setCursor(0,1);
+ // lcd.print("Temp:");
+  lcd.setCursor(14,0);
+  lcd.print(temperatureout+.6);
+  //lcd.setCursor(9,1);
+  lcd.print("C");
+
+  //lcd.setCursor(0,2);
+  //lcd.print("Humout");
+  lcd.setCursor(14,1);
+  lcd.print(humidityout+2.5);
+  //lcd.setCursor(10,2);
+  lcd.print("%");
+
+ lcd.setCursor(16,3);
+  lcd.print(photocellReading);
+  //lcd.setCursor(14,0);
+  //lcd.print(humidityout-5);
+  //lcd.setCursor(11,3);
+  //lcd.print(" *C ");
+   //coop temp
+  lcd.setCursor(0,0);                    // set cursor to column 0, row 0
+  lcd.print("Temp:");               // show "Temp"
+  lcd.print(temperature) ;                    // show temperature of interior coop
+  lcd.print("c");                        // show "F" 
+  //coop humidity
+  lcd.setCursor(0,1);                    // set cursor to column 0, row 0
+  lcd.print("Humid:");               // show "Temp"
+  lcd.print(humidity) ;                    // show temperature of interior coop
+  lcd.print("%");                          // show "c" 
+  //coop door 
+  lcd.setCursor(0,2);                    // set cursor to column 0, row 1
+  lcd.print("Door:");               // show "Coop Door"
+ 
+  if (bottomSwitchPinVal == 1) {         // if coop door bottom switch is closed
+    lcd.print("Closed");                 // display "Closed"
+  } 
+  else if (topSwitchPinVal == 1) {     // if coop door bottom switch is open
+    lcd.print("Open");   }              // display "Open"
+  
+  //coop door out
+  lcd.setCursor(0,3);                    // set cursor to column 0, row 1
+  lcd.print("Door out:");               // show "Coop Door out"
+ 
+  if (bottomSwitchOutPinVal == 1) {         // if coop door bottom switch is closed
+    lcd.print("Closed");                 // display "Closed"
+  } 
+  else if (topSwitchOutPinVal == 1) {     // if coop door bottom switch is open
+    lcd.print("Open");  // display "Open"
+  }
+}
+ 
+// ************************************** the loop **************************************
+ 
+void loop() {
+  docoopdht();
+  doCoopHVACCool();
+  doCoopHVACHeat();
+  doCoopRedLight();
+  doCoopwaterheater () ;
+  doCoopDoor();
+  doCoopDoorOut();
+  doCoopDoorLed();
+  //  doCoopInteriorLightDusk();
+  doLcdMsg();
+  readPhotoCell();
+ //  relaycoopDoor():
+ delaydesoleil();
+}
